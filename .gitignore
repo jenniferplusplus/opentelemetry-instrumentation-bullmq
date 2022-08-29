@@ -1,0 +1,16 @@
+build/
+node_modules/
+coverage/
+
+# OS generated files
+.DS_Store
+
+# VsCode configs
+.vscode/
+
+#Visual Studio
+.vs/
+
+#IDEA
+.idea
+*.iml

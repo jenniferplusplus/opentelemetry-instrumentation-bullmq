@@ -1,0 +1,35 @@
+{
+  "name": "opentelemetry-instrumentation-bullmq",
+  "version": "0.0.1",
+  "description": "Auto-instrumentation for the BullMQ message framework",
+  "main": "index.js",
+  "scripts": {
+    "compile": "tsc -p .",
+    "compile:watch": "tsc -w",
+    "lint": "eslint . --ext .ts",
+    "lint:fix": "eslint . --ext .ts --fix",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "bullmq",
+    "instrumentation",
+    "opentelemetry",
+    "tracing"
+  ],
+  "author": "\"Jennifer Moore\" <contact@jenniferplusplus.com>",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@opentelemetry/api": "^1.1.0",
+    "@opentelemetry/instrumentation": "^0.32.0",
+    "@opentelemetry/semantic-conventions": "^1.6.0",
+    "bullmq": "^1.89.2"
+  },
+  "devDependencies": {
+    "@types/node": "^18.7.13",
+    "@typescript-eslint/eslint-plugin": "^5.35.1",
+    "@typescript-eslint/parser": "^5.35.1",
+    "eslint": "^8.23.0",
+    "ts-mocha": "^10.0.0",
+    "typescript": "^4.8.2"
+  }
+}
