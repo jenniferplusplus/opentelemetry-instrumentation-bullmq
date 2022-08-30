@@ -4,11 +4,12 @@ import {
   InstrumentationNodeModuleDefinition,
 } from '@opentelemetry/instrumentation';
 import {SemanticAttributes} from '@opentelemetry/semantic-conventions';
+import {context, propagation, SpanKind, SpanStatusCode, trace} from '@opentelemetry/api';
+import type {Span, Context} from '@opentelemetry/api'
 import type * as bullmq from 'bullmq';
+import {flatten} from 'flat';
 
 import {VERSION} from './version';
-import {context, propagation, SpanKind, SpanStatusCode, trace} from '@opentelemetry/api';
-import type {Span} from '@opentelemetry/api'
 
 
 export class Instrumentation extends InstrumentationBase<any> {
@@ -37,13 +38,15 @@ export class Instrumentation extends InstrumentationBase<any> {
   }
 
   private _onPatchMain(moduleExports: typeof bullmq) {
-    this._wrap(moduleExports.Queue.prototype, 'add', this._patchQueueAdd);
-    this._wrap(moduleExports.Queue.prototype, 'addBulk', this._patchQueueAdd);
+    this._wrap(moduleExports.Queue.prototype, 'add', this._patchQueueAdd());
+    this._wrap(moduleExports.Queue.prototype, 'addBulk', this._patchQueueAddBulk());
 
     this._wrap(moduleExports.FlowProducer.prototype, 'add', this._patchFlowProducerAdd())
     this._wrap(moduleExports.FlowProducer.prototype, 'addBulk', this._patchFlowProducerAdd())
 
     this._wrap(moduleExports, 'Worker', this._patchWorker());
+
+    this._wrap(moduleExports.Job.prototype, 'addJob', this._patchAddJob());
 
     return moduleExports;
   }
@@ -58,19 +61,22 @@ export class Instrumentation extends InstrumentationBase<any> {
     this._unwrap(moduleExports, 'Worker');
   }
 
-  private _patchQueueAdd(): (original: Function) => any {
+  private _patchQueueAdd(): (original: Function, ...rest: any[]) => (...args: any) => any {
     const instrumentation = this;
-    const tracer = this.tracer;
+    const tracer = instrumentation.tracer;
+    const action = 'add';
 
     return function add(original) {
       return async function patchAdd(this: bullmq.Queue, ...args: any): Promise<bullmq.Job> {
         let [name, data, opts] = [...args];
 
-        const spanName = `${this.name}.${name} add`;
+        const spanName = `${this.name}.${name} ${action}`;
         const span = tracer.startSpan(spanName, {
           attributes: {
             [SemanticAttributes.MESSAGING_SYSTEM]: 'BullMq',
             [SemanticAttributes.MESSAGING_DESTINATION]: this.name,
+            'messaging.bullmq.job.name': name,
+            ...flatten({'messaging.bullmq.job.opts': opts }),
           },
           kind: SpanKind.PRODUCER
         });
@@ -80,8 +86,7 @@ export class Instrumentation extends InstrumentationBase<any> {
 
         // do propagations, use opts as carrier
         opts = opts ?? {};
-        opts.headers = opts.headers ?? {};
-        propagation.inject(messageContext, opts.headers);
+        propagation.inject(messageContext, opts);
 
         let job: bullmq.Job;
         return await context.with(messageContext, async () => {
@@ -91,7 +96,52 @@ export class Instrumentation extends InstrumentationBase<any> {
           } catch (e) {
             throw Instrumentation.setError(span, e as Error);
           } finally {
-            span.setAttribute(SemanticAttributes.MESSAGE_ID, job?.id || 'unknown');
+            span.setAttribute(SemanticAttributes.MESSAGE_ID, job?.id ?? 'unknown');
+            span.end();
+          }
+        });
+      };
+    };
+  }
+
+  private _patchQueueAddBulk(): (original: Function) => (...args: any) => any {
+    const instrumentation = this;
+    const tracer = instrumentation.tracer;
+    const action = 'addBulk';
+
+    return function addBulk(original) {
+      return async function patchAddBulk(this: bullmq.Queue, ...args: bullmq.Job[]): Promise<bullmq.Job[]> {
+        const names = args.map(job => job.name);
+
+        const spanName = `${this.name} ${action}`;
+        const span = tracer.startSpan(spanName, {
+          attributes: {
+            [SemanticAttributes.MESSAGING_SYSTEM]: 'BullMq',
+            [SemanticAttributes.MESSAGING_DESTINATION]: this.name,
+            'messaging.bullmq.job.names': names,
+            'messaging.bullmq.job.count': names.length,
+          },
+          kind: SpanKind.PRODUCER
+        });
+
+        const parentContext = context.active();
+        const messageContext = trace.setSpan(parentContext, span);
+
+        args.forEach(job => {
+          job.opts = job.opts ?? {};
+          propagation.inject(messageContext, job.opts);
+        });
+
+        let jobs: bullmq.Job[];
+        return await context.with(messageContext, async () => {
+          try {
+            jobs = await original.apply(this, ...args);
+            return jobs;
+          } catch (e) {
+            throw Instrumentation.setError(span, e as Error);
+          } finally {
+            const jobIds = jobs.map(job => job.id ?? 'unknown');
+            span.setAttribute(SemanticAttributes.MESSAGE_ID, jobIds);
             span.end();
           }
         });
@@ -104,6 +154,12 @@ export class Instrumentation extends InstrumentationBase<any> {
     span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
     return error;
   };
+
+  private static propagateFlowJob(ctx: Context, job: bullmq.FlowJob){
+    job.opts = job.opts ?? {};
+    propagation.inject(ctx, job.opts);
+    job.children?.forEach(job => Instrumentation.propagateFlowJob(ctx, job));
+  }
 }
 
 
