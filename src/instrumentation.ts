@@ -12,6 +12,7 @@ import {flatten} from 'flat';
 
 import {VERSION} from './version';
 import {BullMQAttributes} from "./attributes";
+import {BullMqInstrumentation} from "./index";
 
 
 export class Instrumentation extends InstrumentationBase {
@@ -76,15 +77,15 @@ export class Instrumentation extends InstrumentationBase {
         this.opts = this.opts ?? {};
         const span = tracer.startSpan(spanName, {
           attributes: {
-            [SemanticAttributes.MESSAGING_SYSTEM]: 'BullMq',
+            [SemanticAttributes.MESSAGING_SYSTEM]: BullMQAttributes.MESSAGING_SYSTEM,
             [SemanticAttributes.MESSAGING_DESTINATION]: this.queueName,
             [BullMQAttributes.JOB_NAME]: this.name,
+            ...Instrumentation.attrMap(BullMQAttributes.JOB_OPTS, this.opts),
           },
           kind: SpanKind.PRODUCER
         });
         if (parentOpts) {
           span.setAttributes({
-            ...Instrumentation.attrMap(BullMQAttributes.JOB_OPTS, this.opts),
             [BullMQAttributes.JOB_PARENT_KEY]: parentOpts.parentKey ?? 'unknown',
             [BullMQAttributes.JOB_WAIT_CHILDREN_KEY]: parentOpts.waitChildrenKey ?? 'unknown',
           });
@@ -120,7 +121,7 @@ export class Instrumentation extends InstrumentationBase {
         const spanName = `${this.name}.${name} ${action}`;
         const span = tracer.startSpan(spanName, {
           attributes: {
-            [SemanticAttributes.MESSAGING_SYSTEM]: 'BullMq',
+            [SemanticAttributes.MESSAGING_SYSTEM]: BullMQAttributes.MESSAGING_SYSTEM,
             [SemanticAttributes.MESSAGING_DESTINATION]: this.name,
             [BullMQAttributes.JOB_NAME]: name,
           },
@@ -144,10 +145,10 @@ export class Instrumentation extends InstrumentationBase {
         const spanName = `${this.name} ${action}`;
         const span = tracer.startSpan(spanName, {
           attributes: {
-            [SemanticAttributes.MESSAGING_SYSTEM]: 'BullMq',
+            [SemanticAttributes.MESSAGING_SYSTEM]: BullMQAttributes.MESSAGING_SYSTEM,
             [SemanticAttributes.MESSAGING_DESTINATION]: this.name,
-            'messaging.bullmq.job.names': names,
-            'messaging.bullmq.job.count': names.length,
+            [BullMQAttributes.JOB_BULK_NAMES]: names,
+            [BullMQAttributes.JOB_BULK_COUNT]: names.length,
           },
           kind: SpanKind.INTERNAL
         });
