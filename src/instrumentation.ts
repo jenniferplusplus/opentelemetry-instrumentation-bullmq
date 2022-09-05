@@ -7,12 +7,22 @@ import {SemanticAttributes} from '@opentelemetry/semantic-conventions';
 import type {Attributes, Span} from '@opentelemetry/api'
 import {context, propagation, SpanKind, SpanStatusCode, trace} from '@opentelemetry/api';
 import type * as bullmq from 'bullmq';
-import type {FlowJob, FlowOpts, FlowProducer, Job, JobNode, JobsOptions, ParentOpts, Queue} from 'bullmq';
+import type {
+  FlowJob,
+  FlowOpts,
+  FlowProducer,
+  Job,
+  JobNode,
+  JobsOptions,
+  ParentOpts,
+  Queue,
+  Worker,
+  WorkerOptions
+} from 'bullmq';
 import {flatten} from 'flat';
 
 import {VERSION} from './version';
 import {BullMQAttributes} from "./attributes";
-import {BullMqInstrumentation} from "./index";
 
 
 export class Instrumentation extends InstrumentationBase {
@@ -28,14 +38,12 @@ export class Instrumentation extends InstrumentationBase {
    *   the plugin should patch multiple modules or versions.
    */
   protected init() {
-    const module = new InstrumentationNodeModuleDefinition<typeof bullmq>(
+    return new InstrumentationNodeModuleDefinition<typeof bullmq>(
       'bullmq',
       ['1.*'],
       this._onPatchMain,
       this._onUnPatchMain,
     );
-
-    return module;
   }
 
   private _onPatchMain(moduleExports: typeof bullmq) {
@@ -46,7 +54,9 @@ export class Instrumentation extends InstrumentationBase {
     this._wrap(moduleExports.FlowProducer.prototype, 'addBulk', this._patchFlowProducerAddBulk())
     this._wrap(moduleExports.Job.prototype, 'addJob', this._patchAddJob());
 
-    this._wrap(moduleExports, 'Worker', this._patchWorker());
+    // This works, shimmer.d.ts is a lying liar
+    // @ts-expect-error
+    this._wrap(moduleExports.Worker.prototype, 'constructor', this._patchWorker());
 
     // As Events
     this._wrap(moduleExports.Job.prototype, 'extendLock', this._patchExtendLock());
@@ -186,7 +196,7 @@ export class Instrumentation extends InstrumentationBase {
     const action = 'FlowProducer.addBulk';
 
     return function addBulk(original) {
-      return async function patch(this: FlowProducer, flows: FlowJob[]): Promise<JobNode> {
+      return async function patch(this: FlowProducer, ...args): Promise<JobNode> {
         const spanName = `${action}`;
         const span = tracer.startSpan(spanName, {
           attributes: {
@@ -195,10 +205,78 @@ export class Instrumentation extends InstrumentationBase {
           kind: SpanKind.INTERNAL
         });
 
-        return Instrumentation.withContext(original, span, flows);
+        return Instrumentation.withContext(original, span, args);
       };
     };
   }
+
+  private _patchWorker(): (original: new (...args: any[]) => Worker) => any {
+    const instrumentation = this;
+    return function Worker(original) {
+      return function patch(...args: any[]): Worker {
+        const [name, processor, workerOpts] = [...args];
+
+        if (processor instanceof Function) {
+          const container = {processor};
+          instrumentation._wrap(container, 'processor', instrumentation._patchWorkerCallback(name, workerOpts));
+        }
+
+        return new original(...args);
+      }
+    }
+  }
+
+  private _patchWorkerCallback(workerName: string, workerOpts?: WorkerOptions): (original: Function) => (...args: any) => any {
+    const instrumentation = this;
+    const tracer = instrumentation.tracer;
+    const action = 'Worker.processor';
+
+    return function processor<T extends Function>(original: T) {
+      return async function patch(job: Job, ...args: any[]): Promise<ReturnType<T>> {
+        const currentContext = context.active();
+        const parentContext = propagation.extract(currentContext, job.opts);
+
+        const spanName = `${job.queueName}.${job.name} ${workerName} #${job.attemptsMade + 1}`;
+        const span = tracer.startSpan(spanName, {
+          attributes: {
+            [SemanticAttributes.MESSAGING_SYSTEM]: [BullMQAttributes.MESSAGING_SYSTEM],
+            [SemanticAttributes.MESSAGING_CONSUMER_ID]: workerName,
+            [SemanticAttributes.MESSAGING_MESSAGE_ID]: job.id ?? 'unknown',
+            [SemanticAttributes.MESSAGING_OPERATION]: job.attemptsMade === 0 ? 'receive' : 'process',
+            [BullMQAttributes.JOB_NAME]: job.name,
+            [BullMQAttributes.JOB_ATTEMPTS]: job.attemptsMade,
+            [BullMQAttributes.JOB_TIMESTAMP]: job.timestamp,
+            [BullMQAttributes.JOB_DELAY]: job.delay,
+            ...Instrumentation.attrMap(BullMQAttributes.JOB_OPTS, job.opts),
+            [BullMQAttributes.QUEUE_NAME]: job.queueName,
+            [BullMQAttributes.WORKER_NAME]: workerName,
+            [BullMQAttributes.WORKER_CONCURRENCY]: workerOpts?.concurrency ?? 1,
+            [BullMQAttributes.WORKER_LOCK_DURATION]: workerOpts?.lockDuration ?? 0,
+            [BullMQAttributes.WORKER_LOCK_RENEW]: workerOpts?.lockRenewTime ?? 0,
+            [BullMQAttributes.WORKER_RATE_LIMIT_MAX]: workerOpts?.limiter?.max ?? 'none',
+            [BullMQAttributes.WORKER_RATE_LIMIT_DURATION]: workerOpts?.limiter?.duration ?? 'none',
+            [BullMQAttributes.WORKER_RATE_LIMIT_GROUP]: workerOpts?.limiter?.groupKey ?? 'none',
+          },
+          kind: SpanKind.CONSUMER
+        }, parentContext);
+        if(job.repeatJobKey) span.setAttribute(BullMQAttributes.JOB_REPEAT_KEY, job.repeatJobKey);
+
+        return await context.with(currentContext, async () => {
+          try {
+            return await original(...[job, ...args]);
+          } catch (e) {
+            throw Instrumentation.setError(span, e as Error);
+          } finally {
+            if(job.finishedOn) span.setAttribute(BullMQAttributes.JOB_FINISHED_TIMESTAMP, job.finishedOn);
+            if(job.processedOn) span.setAttribute(BullMQAttributes.JOB_PROCESSED_TIMESTAMP, job.processedOn);
+            if(job.failedReason) span.setAttribute(BullMQAttributes.JOB_FAILED_REASON, job.failedReason);
+
+            span.end();
+          }
+        });
+      }
+    }
+}
 
 
   private static setError = (span: Span, error: Error) => {
