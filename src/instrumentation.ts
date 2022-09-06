@@ -21,8 +21,9 @@ import type {
 import {flatten} from 'flat';
 
 import {VERSION} from './version';
-import {BullMQAttributes} from "./attributes";
+import {BullMQAttributes} from './attributes';
 
+declare type Fn = (...args: any[]) => any;
 
 export class Instrumentation extends InstrumentationBase {
   constructor(config: InstrumentationConfig = {}) {
@@ -53,7 +54,6 @@ export class Instrumentation extends InstrumentationBase {
     this._wrap(moduleExports.FlowProducer.prototype, 'addBulk', this._patchFlowProducerAddBulk())
     this._wrap(moduleExports.Job.prototype, 'addJob', this._patchAddJob());
 
-    // This works, shimmer.d.ts is a lying liar
     // @ts-expect-error
     this._wrap(moduleExports.Worker.prototype, 'constructor', this._patchWorker());
     this._wrap(moduleExports.Worker.prototype, 'run', this._patchWorkerRun());
@@ -132,7 +132,7 @@ export class Instrumentation extends InstrumentationBase {
 
     return function add(original) {
       return async function patch(this: Queue, ...args: any): Promise<Job> {
-        let [name, data, opts] = [...args];
+        const [name] = [...args];
 
         const spanName = `${this.name}.${name} ${action}`;
         const span = tracer.startSpan(spanName, {
@@ -144,7 +144,7 @@ export class Instrumentation extends InstrumentationBase {
           kind: SpanKind.INTERNAL
         });
 
-        return Instrumentation.withContext(original, span, args);
+        return Instrumentation.withContext(this, original, span, args);
       };
     };
   }
@@ -169,7 +169,7 @@ export class Instrumentation extends InstrumentationBase {
           kind: SpanKind.INTERNAL
         });
 
-        return Instrumentation.withContext(original, span, args);
+        return Instrumentation.withContext(this, original, span, args);
       };
     };
   }
@@ -191,7 +191,7 @@ export class Instrumentation extends InstrumentationBase {
           kind: SpanKind.INTERNAL
         });
 
-        return Instrumentation.withContext(original, span, [flow, opts])
+        return Instrumentation.withContext(this, original, span, [flow, opts])
       };
     };
   }
@@ -211,7 +211,7 @@ export class Instrumentation extends InstrumentationBase {
           kind: SpanKind.INTERNAL
         });
 
-        return Instrumentation.withContext(original, span, args);
+        return Instrumentation.withContext(this, original, span, args);
       };
     };
   }
@@ -232,11 +232,11 @@ export class Instrumentation extends InstrumentationBase {
     }
   }
 
-  private _patchWorkerCallback(workerName: string): (original: Function) => (...args: any) => any {
+  private _patchWorkerCallback(workerName: string): (original: Fn) => (...args: any) => any {
     const instrumentation = this;
     const tracer = instrumentation.tracer;
 
-    return function processor<T extends Function>(original: T) {
+    return function processor<T extends Fn>(original: T) {
       return async function patch(job: Job, ...args: any[]): Promise<ReturnType<T>> {
         const currentContext = context.active();
         const parentContext = propagation.extract(currentContext, job.opts);
@@ -258,7 +258,7 @@ export class Instrumentation extends InstrumentationBase {
           },
           kind: SpanKind.CONSUMER
         }, parentContext);
-        if(job.repeatJobKey) span.setAttribute(BullMQAttributes.JOB_REPEAT_KEY, job.repeatJobKey);
+        if (job.repeatJobKey) span.setAttribute(BullMQAttributes.JOB_REPEAT_KEY, job.repeatJobKey);
 
         return await context.with(currentContext, async () => {
           try {
@@ -266,16 +266,16 @@ export class Instrumentation extends InstrumentationBase {
           } catch (e) {
             throw Instrumentation.setError(span, e as Error);
           } finally {
-            if(job.finishedOn) span.setAttribute(BullMQAttributes.JOB_FINISHED_TIMESTAMP, job.finishedOn);
-            if(job.processedOn) span.setAttribute(BullMQAttributes.JOB_PROCESSED_TIMESTAMP, job.processedOn);
-            if(job.failedReason) span.setAttribute(BullMQAttributes.JOB_FAILED_REASON, job.failedReason);
+            if (job.finishedOn) span.setAttribute(BullMQAttributes.JOB_FINISHED_TIMESTAMP, job.finishedOn);
+            if (job.processedOn) span.setAttribute(BullMQAttributes.JOB_PROCESSED_TIMESTAMP, job.processedOn);
+            if (job.failedReason) span.setAttribute(BullMQAttributes.JOB_FAILED_REASON, job.failedReason);
 
             span.end();
           }
         });
       }
     }
-}
+  }
 
   private _patchWorkerRun(): (original: Function) => (...args: any) => any {
     const instrumentation = this;
@@ -299,13 +299,13 @@ export class Instrumentation extends InstrumentationBase {
           kind: SpanKind.INTERNAL
         });
 
-        return Instrumentation.withContext(original, span, args);
+        return Instrumentation.withContext(this, original, span, args);
       };
     };
   }
 
-  private _patchExtendLock(): (original: Function) => (...args: any) => any {
-    return function extendLock<T extends Function>(original: T) {
+  private _patchExtendLock(): (original: Fn) => (...args: any) => any {
+    return function extendLock<T extends Fn>(original: T) {
       return function patch(this: Job, ...args: any): Promise<ReturnType<T>> {
         const span = trace.getSpan(context.active());
         span?.addEvent('extendLock', {
@@ -320,8 +320,8 @@ export class Instrumentation extends InstrumentationBase {
     };
   }
 
-  private _patchRemove(): (original: Function) => (...args: any) => any {
-    return function extendLock<T extends Function>(original: T) {
+  private _patchRemove(): (original: Fn) => (...args: any) => any {
+    return function extendLock<T extends Fn>(original: T) {
       return function patch(this: Job, ...args: any): Promise<ReturnType<T>> {
         const span = trace.getSpan(context.active());
         span?.addEvent('remove', {
@@ -336,8 +336,8 @@ export class Instrumentation extends InstrumentationBase {
     };
   }
 
-  private _patchRetry(): (original: Function) => (...args: any) => any {
-    return function extendLock<T extends Function>(original: T) {
+  private _patchRetry(): (original: Fn) => (...args: any) => any {
+    return function extendLock<T extends Fn>(original: T) {
       return function patch(this: Job, ...args: any): Promise<ReturnType<T>> {
         const span = trace.getSpan(context.active());
         span?.addEvent('retry', {
@@ -358,7 +358,7 @@ export class Instrumentation extends InstrumentationBase {
     span.recordException(error);
     span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
     return error;
-  };
+  }
 
   private static attrMap(prefix: string, opts: JobsOptions): Attributes {
     const attrs = flatten({[prefix]: opts}) as Attributes;
@@ -367,15 +367,15 @@ export class Instrumentation extends InstrumentationBase {
     }
 
     return attrs;
-  };
+  }
 
-  private static async withContext(original: Function, span: Span, args: any[]): Promise<any> {
+  private static async withContext(thisArg: any, original: Function, span: Span, args: any[]): Promise<any> {
     const parentContext = context.active();
     const messageContext = trace.setSpan(parentContext, span);
 
     return await context.with(messageContext, async () => {
       try {
-        return await original.apply(this, ...[args]);
+        return await original.apply(thisArg, ...[args]);
       } catch (e) {
         throw Instrumentation.setError(span, e as Error);
       } finally {
