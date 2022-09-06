@@ -22,16 +22,29 @@
     "@opentelemetry/api": "^1.1.0",
     "@opentelemetry/instrumentation": "^0.32.0",
     "@opentelemetry/semantic-conventions": "^1.6.0",
-    "bullmq": "^1.89.2",
+    "bullmq": "1.*",
     "flat": "^5.0.2"
   },
   "devDependencies": {
+    "@opentelemetry/context-async-hooks": "^1.6.0",
+    "@opentelemetry/sdk-trace-base": "^1.6.0",
+    "@opentelemetry/sdk-trace-node": "^1.6.0",
     "@types/flat": "^5.0.2",
+    "@types/ioredis": "^4.28.10",
+    "@types/mocha": "^9.1.1",
     "@types/node": "^18.7.13",
+    "@types/shimmer": "^1.0.2",
+    "@types/sinon": "^10.0.13",
     "@typescript-eslint/eslint-plugin": "^5.35.1",
     "@typescript-eslint/parser": "^5.35.1",
     "eslint": "^8.23.0",
+    "ioredis-mock": "^8.2.2",
+    "nyc": "^15.1.0",
+    "rewiremock": "^3.14.3",
+    "shimmer": "^1.2.1",
+    "sinon": "^14.0.0",
     "ts-mocha": "^10.0.0",
+    "ts-node": "^10.9.1",
     "typescript": "^4.8.2"
   }
 }
