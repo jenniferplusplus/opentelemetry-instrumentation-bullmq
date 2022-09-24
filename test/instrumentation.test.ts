@@ -1,10 +1,10 @@
-import rewiremock from 'rewiremock';
-rewiremock.overrideEntryPoint(module);
+// import rewiremock from 'rewiremock';
+// rewiremock.overrideEntryPoint(module);
 
 import * as assert from 'assert';
-const Redis = require('ioredis-mock');
-rewiremock('ioredis').with(Redis);
-rewiremock.enable();
+// const Redis = require('ioredis-mock');
+// rewiremock('ioredis').with(Redis);
+// rewiremock.enable();
 
 import { context, trace } from '@opentelemetry/api';
 import { SemanticAttributes } from '@opentelemetry/semantic-conventions';
@@ -16,7 +16,7 @@ import {
 } from '@opentelemetry/sdk-trace-base';
 import {Queue} from 'bullmq';
 
-rewiremock.disable();
+// rewiremock.disable();
 
 import {Instrumentation} from '../src'
 
