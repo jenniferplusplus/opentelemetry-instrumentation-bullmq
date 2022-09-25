@@ -41,45 +41,49 @@ export class Instrumentation extends InstrumentationBase {
     return new InstrumentationNodeModuleDefinition<typeof bullmq>(
       'bullmq',
       ['1.*'],
-      this._onPatchMain,
-      this._onUnPatchMain,
+      this._onPatchMain(),
+      this._onUnPatchMain(),
     );
   }
 
-  private _onPatchMain(moduleExports: typeof bullmq) {
-    // As Spans
-    this._wrap(moduleExports.Queue.prototype, 'add', this._patchQueueAdd());
-    this._wrap(moduleExports.Queue.prototype, 'addBulk', this._patchQueueAddBulk());
-    this._wrap(moduleExports.FlowProducer.prototype, 'add', this._patchFlowProducerAdd())
-    this._wrap(moduleExports.FlowProducer.prototype, 'addBulk', this._patchFlowProducerAddBulk())
-    this._wrap(moduleExports.Job.prototype, 'addJob', this._patchAddJob());
+  private _onPatchMain() {
+    return (moduleExports: typeof bullmq) => {
+      // As Spans
+      this._wrap(moduleExports.Queue.prototype, 'add', this._patchQueueAdd());
+      this._wrap(moduleExports.Queue.prototype, 'addBulk', this._patchQueueAddBulk());
+      this._wrap(moduleExports.FlowProducer.prototype, 'add', this._patchFlowProducerAdd())
+      this._wrap(moduleExports.FlowProducer.prototype, 'addBulk', this._patchFlowProducerAddBulk())
+      this._wrap(moduleExports.Job.prototype, 'addJob', this._patchAddJob());
 
-    // @ts-expect-error
-    this._wrap(moduleExports.Worker.prototype, 'constructor', this._patchWorker());
-    this._wrap(moduleExports.Worker.prototype, 'run', this._patchWorkerRun());
+      // @ts-expect-error
+      this._wrap(moduleExports.Worker.prototype, 'callProcessJob', this._patchCallProcessJob());
+      this._wrap(moduleExports.Worker.prototype, 'run', this._patchWorkerRun());
 
-    // As Events
-    this._wrap(moduleExports.Job.prototype, 'extendLock', this._patchExtendLock());
-    this._wrap(moduleExports.Job.prototype, 'remove', this._patchRemove());
-    this._wrap(moduleExports.Job.prototype, 'retry', this._patchRetry());
+      // As Events
+      this._wrap(moduleExports.Job.prototype, 'extendLock', this._patchExtendLock());
+      this._wrap(moduleExports.Job.prototype, 'remove', this._patchRemove());
+      this._wrap(moduleExports.Job.prototype, 'retry', this._patchRetry());
 
-    return moduleExports;
+      return moduleExports;
+    }
   }
 
-  private _onUnPatchMain(moduleExports: typeof bullmq) {
-    this._unwrap(moduleExports.Queue.prototype, 'add');
-    this._unwrap(moduleExports.Queue.prototype, 'addBulk');
-    this._unwrap(moduleExports.FlowProducer.prototype, 'add')
-    this._unwrap(moduleExports.FlowProducer.prototype, 'addBulk')
-    this._unwrap(moduleExports.Job.prototype, 'addJob');
+  private _onUnPatchMain() {
+    return (moduleExports: typeof bullmq) => {
+      this._unwrap(moduleExports.Queue.prototype, 'add');
+      this._unwrap(moduleExports.Queue.prototype, 'addBulk');
+      this._unwrap(moduleExports.FlowProducer.prototype, 'add')
+      this._unwrap(moduleExports.FlowProducer.prototype, 'addBulk')
+      this._unwrap(moduleExports.Job.prototype, 'addJob');
 
-    // @ts-expect-error
-    this._unwrap(moduleExports.Worker.prototype, 'constructor');
-    this._unwrap(moduleExports.Worker.prototype, 'run');
+      // @ts-expect-error
+      this._unwrap(moduleExports.Worker.prototype, 'callProcessJob');
+      this._unwrap(moduleExports.Worker.prototype, 'run');
 
-    this._unwrap(moduleExports.Job.prototype, 'extendLock');
-    this._unwrap(moduleExports.Job.prototype, 'remove');
-    this._unwrap(moduleExports.Job.prototype, 'retry');
+      this._unwrap(moduleExports.Job.prototype, 'extendLock');
+      this._unwrap(moduleExports.Job.prototype, 'remove');
+      this._unwrap(moduleExports.Job.prototype, 'retry');
+    }
   }
 
   private _patchAddJob(): (original: Function) => (...args: any) => any {
@@ -112,7 +116,7 @@ export class Instrumentation extends InstrumentationBase {
         propagation.inject(messageContext, this.opts);
         return await context.with(messageContext, async () => {
           try {
-            return await original.apply(this, ...[client, parentOpts]);
+            return await original.apply(this, [client, parentOpts]);
           } catch (e) {
             throw Instrumentation.setError(span, e as Error);
           } finally {
@@ -216,28 +220,13 @@ export class Instrumentation extends InstrumentationBase {
     };
   }
 
-  private _patchWorker(): (original: new (...args: any[]) => Worker) => any {
-    const instrumentation = this;
-    return function Worker(original) {
-      return function patch(...args: any[]): Worker {
-        const [name, processor] = [...args];
-
-        if (processor instanceof Function) {
-          const container = {processor};
-          instrumentation._wrap(container, 'processor', instrumentation._patchWorkerCallback(name));
-        }
-
-        return new original(...args);
-      }
-    }
-  }
-
-  private _patchWorkerCallback(workerName: string): (original: Fn) => (...args: any) => any {
+  private _patchCallProcessJob(): (original: Function) => (...args: any) => any {
     const instrumentation = this;
     const tracer = instrumentation.tracer;
 
-    return function processor<T extends Fn>(original: T) {
-      return async function patch(job: Job, ...args: any[]): Promise<ReturnType<T>> {
+    return function patch(original) {
+      return async function callProcessJob(this: Worker, job: any, ...rest: any[]){
+        const workerName = this.name ?? 'anonymous';
         const currentContext = context.active();
         const parentContext = propagation.extract(currentContext, job.opts);
 
@@ -247,7 +236,7 @@ export class Instrumentation extends InstrumentationBase {
             [SemanticAttributes.MESSAGING_SYSTEM]: [BullMQAttributes.MESSAGING_SYSTEM],
             [SemanticAttributes.MESSAGING_CONSUMER_ID]: workerName,
             [SemanticAttributes.MESSAGING_MESSAGE_ID]: job.id ?? 'unknown',
-            [SemanticAttributes.MESSAGING_OPERATION]: job.attemptsMade === 0 ? 'receive' : 'process',
+            [SemanticAttributes.MESSAGING_OPERATION]: 'receive',
             [BullMQAttributes.JOB_NAME]: job.name,
             [BullMQAttributes.JOB_ATTEMPTS]: job.attemptsMade,
             [BullMQAttributes.JOB_TIMESTAMP]: job.timestamp,
@@ -262,7 +251,7 @@ export class Instrumentation extends InstrumentationBase {
 
         return await context.with(currentContext, async () => {
           try {
-            return await original(...[job, ...args]);
+            return await original.apply(this, [job, ...rest]);
           } catch (e) {
             throw Instrumentation.setError(span, e as Error);
           } finally {
