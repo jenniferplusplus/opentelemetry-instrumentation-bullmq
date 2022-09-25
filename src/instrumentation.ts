@@ -94,7 +94,7 @@ export class Instrumentation extends InstrumentationBase {
     return function addJob(original) {
       return async function patch(this:Job, client: never, parentOpts?: ParentOpts): Promise<string> {
         const spanName = `${this.queueName}.${this.name} ${action}`;
-        this.opts = this.opts ?? {};
+        // this.opts = this.opts ?? {};
         const span = tracer.startSpan(spanName, {
           attributes: {
             [SemanticAttributes.MESSAGING_SYSTEM]: BullMQAttributes.MESSAGING_SYSTEM,
@@ -112,6 +112,7 @@ export class Instrumentation extends InstrumentationBase {
         }
         const parentContext = context.active();
         const messageContext = trace.setSpan(parentContext, span);
+        const prop = propagation;
 
         propagation.inject(messageContext, this.opts);
         return await context.with(messageContext, async () => {

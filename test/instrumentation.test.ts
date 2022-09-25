@@ -6,7 +6,8 @@ import * as assert from 'assert';
 // rewiremock('ioredis').with(Redis);
 // rewiremock.enable();
 
-import { context, trace } from '@opentelemetry/api';
+import { context, trace, propagation } from '@opentelemetry/api';
+import { W3CTraceContextPropagator } from '@opentelemetry/core';
 import { SemanticAttributes } from '@opentelemetry/semantic-conventions';
 import { AsyncHooksContextManager } from '@opentelemetry/context-async-hooks';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
@@ -23,6 +24,7 @@ let Worker: typeof bullmq.Worker;
 // rewiremock.disable();
 
 import {Instrumentation} from '../src'
+import {NoopTextMapPropagator} from '@opentelemetry/api/build/esm/propagation/NoopTextMapPropagator';
 
 
 const instrumentation = new Instrumentation();
@@ -53,6 +55,7 @@ describe('bullmq', () => {
     contextManager.enable();
     memoryExporter.reset();
     instrumentation.disable();
+    propagation.setGlobalPropagator(new NoopTextMapPropagator());
   });
 
   describe('Queue', () => {
@@ -139,7 +142,7 @@ describe('bullmq', () => {
       assert.strictEqual(spans.length, 0);
     });
 
-    it('should generate a span for the processor', async () => {
+    it('should create a span for the processor', async () => {
       let done: Function;
       const processed = new Promise((resolve) => {
           done = resolve;
@@ -154,10 +157,36 @@ describe('bullmq', () => {
       await processed;
       await w.close();
 
-      const finishedSpans = memoryExporter.getFinishedSpans();
       const span = memoryExporter.getFinishedSpans()
         .find(span => span.name.includes('Worker.worker'));
       assert.notStrictEqual(span, undefined);
+    });
+
+    it('should propagate from the producer', async () => {
+      propagation.setGlobalPropagator(new W3CTraceContextPropagator());
+
+      let done: Function;
+      const processed = new Promise((resolve) => {
+        done = resolve;
+      });
+
+      const q = new Queue('worker', {connection});
+      const w = new Worker('worker', async (job, token) => {done(); return {completed: new Date().toTimeString()}}, {connection})
+      await w.waitUntilReady();
+
+      await q.add('testJob', {started: new Date().toTimeString()});
+
+      await processed;
+      await w.close();
+
+      const consumer = memoryExporter.getFinishedSpans()
+        .find(span => span.name.includes('Worker.worker'));
+      const producer = memoryExporter.getFinishedSpans()
+        .find(span => span.name.includes('Job.addJob'));
+
+      assert.notStrictEqual(consumer, undefined);
+      assert.notStrictEqual(producer, undefined);
+      assert.strictEqual(producer?.spanContext().spanId, consumer?.parentSpanId);
     });
   });
 });
