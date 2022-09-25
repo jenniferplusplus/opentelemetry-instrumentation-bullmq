@@ -127,22 +127,6 @@ describe('bullmq', () => {
       Queue = require('bullmq').Queue;
     });
 
-    // after(() => {
-    //   const test = new Queue('test');
-    //   test.drain(true);
-    //   test.clean(0, 1000, 'completed');
-    //   test.clean(0, 1000, 'active');
-    //   test.clean(0, 1000, 'paused');
-    //   test.clean(0, 1000, 'failed');
-    //
-    //   const workerTest = new Queue('workerTest');
-    //   workerTest.drain(true);
-    //   workerTest.clean(0, 1000, 'completed');
-    //   workerTest.clean(0, 1000, 'active');
-    //   workerTest.clean(0, 1000, 'paused');
-    //   workerTest.clean(0, 1000, 'failed');
-    // });
-
     it('should not generate any spans when disabled', async () => {
       instrumentation.disable();
       const w = new Worker('disabled', async (job, token) => {}, {connection})
@@ -155,22 +139,24 @@ describe('bullmq', () => {
       assert.strictEqual(spans.length, 0);
     });
 
-    it('should generate a processor span for the callback', async () => {
+    it('should generate a span for the processor', async () => {
       let done: Function;
-      const cb = new Promise((resolve, reject) => {
+      const processed = new Promise((resolve) => {
           done = resolve;
       });
 
-      const w = new Worker('worker', async (job, token) => {return {complete: 'yes'}}, {connection})
+      const w = new Worker('worker', async (job, token) => {done(); return {completed: new Date().toTimeString()}}, {connection})
+      await w.waitUntilReady();
+
       const q = new Queue('worker', {connection});
       await q.add('testJob', {test: 'yes'});
 
-      await w.waitUntilReady();
+      await processed;
       await w.close();
 
       const finishedSpans = memoryExporter.getFinishedSpans();
       const span = memoryExporter.getFinishedSpans()
-        .find(span => span.name.includes('processor'));
+        .find(span => span.name.includes('Worker.worker'));
       assert.notStrictEqual(span, undefined);
     });
   });
