@@ -6,9 +6,8 @@ import * as assert from 'assert';
 // rewiremock('ioredis').with(Redis);
 // rewiremock.enable();
 
-import { context, trace, propagation } from '@opentelemetry/api';
+import { context, propagation } from '@opentelemetry/api';
 import { W3CTraceContextPropagator } from '@opentelemetry/core';
-import { SemanticAttributes } from '@opentelemetry/semantic-conventions';
 import { AsyncHooksContextManager } from '@opentelemetry/context-async-hooks';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import {
@@ -17,29 +16,34 @@ import {
 } from '@opentelemetry/sdk-trace-base';
 import type * as bullmq from 'bullmq';
 
+import {Instrumentation} from '../src'
+
+// rewiremock.disable();
+
 let Queue: typeof bullmq.Queue;
 let FlowProducer: typeof bullmq.FlowProducer;
 let Worker: typeof bullmq.Worker;
 
-// rewiremock.disable();
 
-import {Instrumentation} from '../src'
-import {NoopTextMapPropagator} from '@opentelemetry/api/build/esm/propagation/NoopTextMapPropagator';
+function getWait(): [Promise<any>, Function, Function] {
+  let resolve: Function;
+  let reject: Function
+  const p = new Promise((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
 
-
-const instrumentation = new Instrumentation();
-// const tracer = provider.getTracer('default');
-//
-// instrumentation.enable();
-
+  // @ts-ignore
+  return [p, resolve, reject];
+}
 
 describe('bullmq', () => {
+  const instrumentation = new Instrumentation();
   const connection = {host: 'localhost'};
   const provider = new NodeTracerProvider();
   const memoryExporter = new InMemorySpanExporter();
   const spanProcessor = new SimpleSpanProcessor(memoryExporter);
   provider.addSpanProcessor(spanProcessor);
-  const tracer = provider.getTracer('default');
   let contextManager = new AsyncHooksContextManager();
 
   beforeEach(() => {
@@ -47,7 +51,11 @@ describe('bullmq', () => {
     context.setGlobalContextManager(contextManager);
     instrumentation.setTracerProvider(provider);
     instrumentation.enable();
-    // connection = new Redis(QueueOpts);
+    propagation.setGlobalPropagator(new W3CTraceContextPropagator());
+
+    Worker = require('bullmq').Worker;
+    Queue = require('bullmq').Queue;
+    FlowProducer = require('bullmq').FlowProducer;
   });
 
   afterEach(() => {
@@ -55,14 +63,9 @@ describe('bullmq', () => {
     contextManager.enable();
     memoryExporter.reset();
     instrumentation.disable();
-    propagation.setGlobalPropagator(new NoopTextMapPropagator());
   });
 
   describe('Queue', () => {
-    beforeEach(() => {
-      Queue = require('bullmq').Queue;
-    });
-
     it('should not generate any spans when disabled', async () => {
       instrumentation.disable();
       const q = new Queue('disabled', {connection});
@@ -92,10 +95,6 @@ describe('bullmq', () => {
   });
 
   describe('FlowProducer', () => {
-    beforeEach(() => {
-      FlowProducer = require('bullmq').FlowProducer;
-    });
-
     it('should not generate any spans when disabled', async () => {
       instrumentation.disable();
       const q = new FlowProducer();
@@ -125,11 +124,6 @@ describe('bullmq', () => {
   });
 
   describe('Worker', () => {
-    beforeEach(() => {
-      Worker = require('bullmq').Worker;
-      Queue = require('bullmq').Queue;
-    });
-
     it('should not generate any spans when disabled', async () => {
       instrumentation.disable();
       const w = new Worker('disabled', async (job, token) => {}, {connection})
@@ -143,18 +137,15 @@ describe('bullmq', () => {
     });
 
     it('should create a span for the processor', async () => {
-      let done: Function;
-      const processed = new Promise((resolve) => {
-          done = resolve;
-      });
+      const [processor, processorDone] = getWait();
 
-      const w = new Worker('worker', async (job, token) => {done(); return {completed: new Date().toTimeString()}}, {connection})
+      const w = new Worker('worker', async (job, token) => {processorDone(); return {completed: new Date().toTimeString()}}, {connection})
       await w.waitUntilReady();
 
       const q = new Queue('worker', {connection});
       await q.add('testJob', {test: 'yes'});
 
-      await processed;
+      await processor;
       await w.close();
 
       const span = memoryExporter.getFinishedSpans()
@@ -163,26 +154,19 @@ describe('bullmq', () => {
     });
 
     it('should propagate from the producer', async () => {
-      propagation.setGlobalPropagator(new W3CTraceContextPropagator());
-
-      let done: Function;
-      const processed = new Promise((resolve) => {
-        done = resolve;
-      });
+      const [processor, processorDone] = getWait();
 
       const q = new Queue('worker', {connection});
-      const w = new Worker('worker', async (job, token) => {done(); return {completed: new Date().toTimeString()}}, {connection})
+      const w = new Worker('worker', async (job, token) => {processorDone(); return {completed: new Date().toTimeString()}}, {connection})
       await w.waitUntilReady();
 
       await q.add('testJob', {started: new Date().toTimeString()});
 
-      await processed;
+      await processor;
       await w.close();
 
-      const consumer = memoryExporter.getFinishedSpans()
-        .find(span => span.name.includes('Worker.worker'));
-      const producer = memoryExporter.getFinishedSpans()
-        .find(span => span.name.includes('Job.addJob'));
+      const consumer = memoryExporter.getFinishedSpans().find(span => span.name.includes('Worker.worker'));
+      const producer = memoryExporter.getFinishedSpans().find(span => span.name.includes('Job.addJob'));
 
       assert.notStrictEqual(consumer, undefined);
       assert.notStrictEqual(producer, undefined);
