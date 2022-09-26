@@ -31,3 +31,12 @@ jobs:
       - run: npm run compile
       - run: npm run lint
       - run: npm test
+      - name: NPM Publish
+        uses: JS-DevTools/npm-publish@v1
+        with:
+          token: ${{ secrets.NPM_TOKEN }}
+          access: public
+          dry-run: true
+          greater-version-only: true
+
+
