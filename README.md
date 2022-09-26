@@ -1,7 +1,5 @@
 # OpenTelemetry Bullmq Instrumentation for Node.js
 
-[![Apache License][license-image]][license-image]
-
 This module provides automatic tracing instrumentation for [BullMQ][bullmq-web-url].
 
 Compatible with OpenTelemetry JS API and SDK `1.0+`.
@@ -63,10 +61,8 @@ registerInstrumentations({
 
 Apache 2.0 - See [LICENSE][license-url] for more information.
 
-[license-url]: https://github.com/open-telemetry/opentelemetry-js-contrib/blob/main/LICENSE
-[license-image]: https://img.shields.io/badge/license-Apache_2.0-green.svg?style=flat
+[license-url]: https://opensource.org/licenses/Apache-2.0
 [npm-url]: https://www.npmjs.com/package/@jenniferplusplus/opentelemetry-instrumentation-bullmq
-[npm-img]: https://badge.fury.io/js/%40opentelemetry%2Finstrumentation-nestjs-core.svg
 [bullmq-web-url]: https://docs.bullmq.io/
 
 ## Contributing
