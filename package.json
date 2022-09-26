@@ -2,7 +2,9 @@
   "name": "@jenniferplusplus/opentelemetry-instrumentation-bullmq",
   "version": "0.0.1",
   "description": "Auto-instrumentation for the BullMQ message framework",
-  "main": "index.js",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist/"],
   "scripts": {
     "compile": "tsc -p .",
     "compile:watch": "tsc -w",
