@@ -31,6 +31,10 @@ jobs:
       - run: npm run compile
       - run: npm run lint
       - run: npm test
+
+  publish:
+    runs-on: ubuntu-latest
+    steps:
       - name: NPM Publish
         uses: JS-DevTools/npm-publish@v1
         with:
