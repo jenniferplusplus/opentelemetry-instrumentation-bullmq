@@ -6,7 +6,7 @@ import * as assert from 'assert';
 // rewiremock('ioredis').with(Redis);
 // rewiremock.enable();
 
-import {context, propagation, SpanStatusCode, trace} from '@opentelemetry/api';
+import { context, propagation, SpanStatusCode } from '@opentelemetry/api';
 import { W3CTraceContextPropagator } from '@opentelemetry/core';
 import { AsyncHooksContextManager } from '@opentelemetry/context-async-hooks';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
@@ -16,7 +16,7 @@ import {
 } from '@opentelemetry/sdk-trace-base';
 import type * as bullmq from 'bullmq';
 
-import {Instrumentation} from '../src'
+import {BullMQInstrumentation} from '../src'
 
 // rewiremock.disable();
 
@@ -38,13 +38,13 @@ function getWait(): [Promise<any>, Function, Function] {
 }
 
 describe('bullmq', () => {
-  const instrumentation = new Instrumentation();
+  const instrumentation = new BullMQInstrumentation();
   const connection = {host: 'localhost'};
   const provider = new NodeTracerProvider();
   const memoryExporter = new InMemorySpanExporter();
   const spanProcessor = new SimpleSpanProcessor(memoryExporter);
   provider.addSpanProcessor(spanProcessor);
-  let contextManager = new AsyncHooksContextManager();
+  const contextManager = new AsyncHooksContextManager();
 
   beforeEach(() => {
     contextManager.enable();
@@ -53,9 +53,11 @@ describe('bullmq', () => {
     instrumentation.enable();
     propagation.setGlobalPropagator(new W3CTraceContextPropagator());
 
+    /* eslint-disable @typescript-eslint/no-var-requires */
     Worker = require('bullmq').Worker;
     Queue = require('bullmq').Queue;
     FlowProducer = require('bullmq').FlowProducer;
+    /* eslint-enable @typescript-eslint/no-var-requires */
   });
 
   afterEach(() => {
@@ -80,7 +82,7 @@ describe('bullmq', () => {
       await q.add('testJob', {test: 'yes'});
 
       const span = memoryExporter.getFinishedSpans()
-          .find(span => span.name.includes('Queue.add'));
+        .find(span => span.name.includes('Queue.add'));
       assert.notStrictEqual(span, undefined);
     });
 
@@ -109,7 +111,7 @@ describe('bullmq', () => {
       await q.add({name: 'testJob', queueName: 'flow'});
 
       const span = memoryExporter.getFinishedSpans()
-          .find(span => span.name.includes('FlowProducer.add'));
+        .find(span => span.name.includes('FlowProducer.add'));
       assert.notStrictEqual(span, undefined);
     });
 
@@ -126,7 +128,7 @@ describe('bullmq', () => {
   describe('Worker', () => {
     it('should not generate any spans when disabled', async () => {
       instrumentation.disable();
-      const w = new Worker('disabled', async (job, token) => {}, {connection})
+      const w = new Worker('disabled', async () => undefined, {connection})
       await w.waitUntilReady();
 
       const q = new Queue('disabled', {connection});
@@ -139,7 +141,9 @@ describe('bullmq', () => {
     it('should create a span for the processor', async () => {
       const [processor, processorDone] = getWait();
 
-      const w = new Worker('worker', async (job, token) => {processorDone(); return {completed: new Date().toTimeString()}}, {connection})
+      const w = new Worker('worker', async () => {
+        processorDone(); return {completed: new Date().toTimeString()}
+      }, {connection})
       await w.waitUntilReady();
 
       const q = new Queue('worker', {connection});
@@ -157,7 +161,9 @@ describe('bullmq', () => {
       const [processor, processorDone] = getWait();
 
       const q = new Queue('worker', {connection});
-      const w = new Worker('worker', async (job, token) => {processorDone(); return {completed: new Date().toTimeString()}}, {connection})
+      const w = new Worker('worker', async () => {
+        processorDone(); return {completed: new Date().toTimeString()}
+      }, {connection})
       await w.waitUntilReady();
 
       await q.add('testJob', {started: new Date().toTimeString()});
@@ -199,7 +205,7 @@ describe('bullmq', () => {
       const [processor, processorDone] = getWait();
 
       const q = new Queue('worker', {connection});
-      const w = new Worker('worker', async (job, token) => {
+      const w = new Worker('worker', async () => {
         processorDone();
         throw new Error('forced error');
       }, {connection})

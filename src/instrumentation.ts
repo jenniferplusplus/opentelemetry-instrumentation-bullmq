@@ -112,7 +112,6 @@ export class Instrumentation extends InstrumentationBase {
         }
         const parentContext = context.active();
         const messageContext = trace.setSpan(parentContext, span);
-        const prop = propagation;
 
         propagation.inject(messageContext, this.opts);
         return await context.with(messageContext, async () => {
