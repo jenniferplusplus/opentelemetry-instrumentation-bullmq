@@ -1,1 +1,1 @@
-export * from './instrumentation';
+export * as BullMQInstrumentation from './instrumentation';
