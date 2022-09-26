@@ -231,10 +231,10 @@ export class Instrumentation extends InstrumentationBase {
         const currentContext = context.active();
         const parentContext = propagation.extract(currentContext, job.opts);
 
-        const spanName = `${job.queueName}.${job.name} Worker.${workerName} #${job.attemptsMade + 1}`;
+        const spanName = `${job.queueName}.${job.name} Worker.${workerName} #${job.attemptsMade}`;
         const span = tracer.startSpan(spanName, {
           attributes: {
-            [SemanticAttributes.MESSAGING_SYSTEM]: [BullMQAttributes.MESSAGING_SYSTEM],
+            [SemanticAttributes.MESSAGING_SYSTEM]: BullMQAttributes.MESSAGING_SYSTEM,
             [SemanticAttributes.MESSAGING_CONSUMER_ID]: workerName,
             [SemanticAttributes.MESSAGING_MESSAGE_ID]: job.id ?? 'unknown',
             [SemanticAttributes.MESSAGING_OPERATION]: 'receive',
@@ -249,10 +249,12 @@ export class Instrumentation extends InstrumentationBase {
           kind: SpanKind.CONSUMER
         }, parentContext);
         if (job.repeatJobKey) span.setAttribute(BullMQAttributes.JOB_REPEAT_KEY, job.repeatJobKey);
+        const messageContext = trace.setSpan(parentContext, span);
 
-        return await context.with(currentContext, async () => {
+        return await context.with(messageContext, async () => {
           try {
-            return await original.apply(this, [job, ...rest]);
+            const result = await original.apply(this, [job, ...rest]);
+            return result;
           } catch (e) {
             throw Instrumentation.setError(span, e as Error);
           } finally {
@@ -279,9 +281,9 @@ export class Instrumentation extends InstrumentationBase {
           attributes: {
             [SemanticAttributes.MESSAGING_SYSTEM]: BullMQAttributes.MESSAGING_SYSTEM,
             [BullMQAttributes.WORKER_NAME]: this.name,
-            [BullMQAttributes.WORKER_CONCURRENCY]: this.opts?.concurrency ?? 1,
-            [BullMQAttributes.WORKER_LOCK_DURATION]: this.opts?.lockDuration ?? 0,
-            [BullMQAttributes.WORKER_LOCK_RENEW]: this.opts?.lockRenewTime ?? 0,
+            [BullMQAttributes.WORKER_CONCURRENCY]: this.opts?.concurrency ?? 'default',
+            [BullMQAttributes.WORKER_LOCK_DURATION]: this.opts?.lockDuration ?? 'default',
+            [BullMQAttributes.WORKER_LOCK_RENEW]: this.opts?.lockRenewTime ?? 'default',
             [BullMQAttributes.WORKER_RATE_LIMIT_MAX]: this.opts?.limiter?.max ?? 'none',
             [BullMQAttributes.WORKER_RATE_LIMIT_DURATION]: this.opts?.limiter?.duration ?? 'none',
             [BullMQAttributes.WORKER_RATE_LIMIT_GROUP]: this.opts?.limiter?.groupKey ?? 'none',
@@ -305,7 +307,7 @@ export class Instrumentation extends InstrumentationBase {
           [BullMQAttributes.JOB_ATTEMPTS]: this.attemptsMade
         });
 
-        return original(...args);
+        return original.apply(this, args);
       };
     };
   }
@@ -321,7 +323,7 @@ export class Instrumentation extends InstrumentationBase {
           [BullMQAttributes.JOB_ATTEMPTS]: this.attemptsMade
         });
 
-        return original(...args);
+        return original.apply(this, args);
       };
     };
   }
@@ -337,7 +339,7 @@ export class Instrumentation extends InstrumentationBase {
           [BullMQAttributes.JOB_ATTEMPTS]: this.attemptsMade
         });
 
-        return original(...args);
+        return original.apply(this, args);
       };
     };
   }

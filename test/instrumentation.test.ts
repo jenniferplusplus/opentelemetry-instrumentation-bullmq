@@ -6,7 +6,7 @@ import * as assert from 'assert';
 // rewiremock('ioredis').with(Redis);
 // rewiremock.enable();
 
-import { context, propagation } from '@opentelemetry/api';
+import {context, propagation, SpanStatusCode, trace} from '@opentelemetry/api';
 import { W3CTraceContextPropagator } from '@opentelemetry/core';
 import { AsyncHooksContextManager } from '@opentelemetry/context-async-hooks';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
@@ -171,6 +171,51 @@ describe('bullmq', () => {
       assert.notStrictEqual(consumer, undefined);
       assert.notStrictEqual(producer, undefined);
       assert.strictEqual(producer?.spanContext().spanId, consumer?.parentSpanId);
+    });
+
+    it('should capture events from the processor', async () => {
+      const [processor, processorDone] = getWait();
+
+      const q = new Queue('worker', {connection});
+      const w = new Worker('worker', async (job, token) => {
+        await job.extendLock(token as string, 20);
+        processorDone();
+        return {completed: new Date().toTimeString()}
+      }, {connection})
+      await w.waitUntilReady();
+
+      await q.add('testJob', {started: new Date().toTimeString()});
+
+      await processor;
+      await w.close();
+
+      const span = memoryExporter.getFinishedSpans().find(span => span.name.includes('Worker.worker'));
+      const evt = span?.events.find(event => event.name.includes('extendLock'));
+
+      assert.notStrictEqual(evt, undefined);
+    });
+
+    it('should capture errors from the processor', async () => {
+      const [processor, processorDone] = getWait();
+
+      const q = new Queue('worker', {connection});
+      const w = new Worker('worker', async (job, token) => {
+        processorDone();
+        throw new Error('forced error');
+      }, {connection})
+      await w.waitUntilReady();
+
+      await q.add('testJob', {started: new Date().toTimeString()});
+
+      await processor;
+      await w.close();
+
+      const span = memoryExporter.getFinishedSpans().find(span => span.name.includes('Worker.worker'));
+      const evt = span?.events.find(event => event.name.includes('exception'));
+
+      assert.notStrictEqual(evt, undefined);
+      assert.strictEqual(span?.status.code, SpanStatusCode.ERROR);
+      assert.strictEqual(span?.status.message, 'forced error');
     });
   });
 });
