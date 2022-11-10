@@ -10,6 +10,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         node-version: [14.x, 16.x]
     services:
@@ -35,7 +36,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - id: version
-        uses: EndBug/version-check@v1
+        uses: EndBug/version-check@v2.1.1
         with:
           file-url: https://unpkg.com/@jenniferplusplus/opentelemetry-instrumentation-bullmq@latest/package.json
           static-checking: localIsNew

@@ -15,14 +15,13 @@ npm install --save @jenniferplusplus/opentelemetry-instrumentation-bullmq
 
 ### Supported Versions
 
-- `>=1.90.1`
-- `<2.0.0`
+- `[1.90.1, 2.x]`
 
-It's likely that the instrumentation would support earlier versions of BullMQ, but I haven't tested it. I plan to add support for v2.0.0+ soon.
+It's likely that the instrumentation would support earlier versions of BullMQ, but I haven't tested it.
 
 ## Usage
 
-OpenTelemetry Nest Instrumentation allows the user to automatically collect trace data from the controller handlers and export them to the backend of choice.
+OpenTelemetry Bullmq Instrumentation allows the user to automatically collect trace data from the controller handlers and export them to the backend of choice.
 
 To load the instrumentation, specify it in the instrumentations list to `registerInstrumentations`. There is currently no configuration option.
 
