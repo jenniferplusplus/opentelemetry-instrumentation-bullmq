@@ -26,7 +26,7 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
       - run: npm ci
-      - run: npm install bullmq@${{ matrix.bullmq-version }}
+      - run: npm install bullmq@${{ matrix.bullmq-version }} --no-package-lock --no-save
       - run: npm run compile
       - run: npm run lint
       - run: npm test
