@@ -40,7 +40,7 @@ export class Instrumentation extends InstrumentationBase {
   protected init() {
     return new InstrumentationNodeModuleDefinition<typeof bullmq>(
       'bullmq',
-      ['2.*'],
+      ['1.*', '2.*'],
       this._onPatchMain(),
       this._onUnPatchMain(),
     );
