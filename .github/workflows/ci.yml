@@ -10,9 +10,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
       matrix:
         node-version: [14.x, 16.x]
+        bullmq-version: [1.90.x, 2.0.x, 2.x]
     services:
       redis:
         image: redis:alpine
@@ -25,6 +25,7 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
       - run: npm ci
+      - run: npm install bullmq@${{ matrix.bullmq-version }}
       - run: npm run compile
       - run: npm run lint
       - run: npm test
@@ -57,5 +58,4 @@ jobs:
         with:
           token: ${{ secrets.NPM_TOKEN }}
           access: public
-
 
