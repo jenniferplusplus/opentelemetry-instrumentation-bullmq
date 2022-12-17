@@ -1,6 +1,6 @@
 # OpenTelemetry Bullmq Instrumentation for Node.js
 
-![GitHub Workflow Status](https://img.shields.io/github/workflow/status/jenniferplusplus/opentelemetry-instrumentation-bullmq/Node.js%20CI)
+[![Node.js CI](https://github.com/jenniferplusplus/opentelemetry-instrumentation-bullmq/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jenniferplusplus/opentelemetry-instrumentation-bullmq/actions/workflows/ci.yml) 
 [![npm version](https://badge.fury.io/js/@jenniferplusplus%2Fopentelemetry-instrumentation-bullmq.svg)](https://badge.fury.io/js/@jenniferplusplus%2Fopentelemetry-instrumentation-bullmq)
 
 This module provides automatic tracing instrumentation for [BullMQ][bullmq-web-url].
