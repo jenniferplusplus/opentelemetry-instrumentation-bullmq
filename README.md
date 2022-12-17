@@ -21,7 +21,7 @@ It's likely that the instrumentation would support earlier versions of BullMQ, b
 
 ## Usage
 
-OpenTelemetry Bullmq Instrumentation allows the user to automatically collect trace data from the controller handlers and export them to the backend of choice.
+OpenTelemetry Bullmq Instrumentation allows the user to automatically collect trace data from Bullmq jobs and workers and export them to the backend of choice.
 
 To load the instrumentation, specify it in the instrumentations list to `registerInstrumentations`. There is currently no configuration option.
 
