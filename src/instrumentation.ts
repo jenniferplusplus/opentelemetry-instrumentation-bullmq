@@ -40,7 +40,7 @@ export class Instrumentation extends InstrumentationBase {
   protected init() {
     return new InstrumentationNodeModuleDefinition<typeof bullmq>(
       'bullmq',
-      ['1.*', '2.*'],
+      ['1.*', '2.*', '3.*'],
       this._onPatchMain(),
       this._onUnPatchMain(),
     );
@@ -285,7 +285,8 @@ export class Instrumentation extends InstrumentationBase {
             [BullMQAttributes.WORKER_LOCK_RENEW]: this.opts?.lockRenewTime ?? 'default',
             [BullMQAttributes.WORKER_RATE_LIMIT_MAX]: this.opts?.limiter?.max ?? 'none',
             [BullMQAttributes.WORKER_RATE_LIMIT_DURATION]: this.opts?.limiter?.duration ?? 'none',
-            [BullMQAttributes.WORKER_RATE_LIMIT_GROUP]: this.opts?.limiter?.groupKey ?? 'none',
+            // Limit by group keys was removed in bullmq 3.x
+            [BullMQAttributes.WORKER_RATE_LIMIT_GROUP]: (this.opts?.limiter as any)?.groupKey ?? 'none',
           },
           kind: SpanKind.INTERNAL
         });
