@@ -12,6 +12,7 @@
     "compile:watch": "tsc -w",
     "lint": "eslint src/ test/ --ext .ts",
     "lint:fix": "eslint src/ test/ --ext .ts --fix",
+    "prepare": "npm run compile",
     "test": "mocha --require ts-node/register --exit --timeout 10000 test/**/*.test.ts"
   },
   "keywords": [
