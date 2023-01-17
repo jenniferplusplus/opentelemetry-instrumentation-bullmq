@@ -11,8 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [14.x, 16.x]
-        bullmq-version: [1.90.x, 2.0.x, 2.x]
+        node-version: [14.x, 16.x, 18.x]
+        bullmq-version: [1.90.x, 2.x, 3.x]
     services:
       redis:
         image: redis:alpine
