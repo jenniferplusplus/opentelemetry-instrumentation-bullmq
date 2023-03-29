@@ -8,14 +8,9 @@ import type {Attributes, Span} from '@opentelemetry/api'
 import {context, propagation, SpanKind, SpanStatusCode, trace} from '@opentelemetry/api';
 import type * as bullmq from 'bullmq';
 import type {
-  FlowJob,
-  FlowOpts,
-  FlowProducer,
   Job,
-  JobNode,
   JobsOptions,
   ParentOpts,
-  Queue,
   Worker,
 } from 'bullmq';
 import {flatten} from 'flat';
@@ -23,7 +18,6 @@ import {flatten} from 'flat';
 import {VERSION} from './version';
 import {BullMQAttributes} from './attributes';
 
-declare type Fn = (...args: any[]) => any;
 
 export class Instrumentation extends InstrumentationBase {
   constructor(config: InstrumentationConfig = {}) {
@@ -51,20 +45,11 @@ export class Instrumentation extends InstrumentationBase {
       this._diag.debug('patching');
 
       // As Spans
-      this._wrap(moduleExports.Queue.prototype, 'add', this._patchQueueAdd());
       this._wrap(moduleExports.Queue.prototype, 'addBulk', this._patchQueueAddBulk());
-      this._wrap(moduleExports.FlowProducer.prototype, 'add', this._patchFlowProducerAdd())
-      this._wrap(moduleExports.FlowProducer.prototype, 'addBulk', this._patchFlowProducerAddBulk())
       this._wrap(moduleExports.Job.prototype, 'addJob', this._patchAddJob());
 
       // @ts-expect-error
       this._wrap(moduleExports.Worker.prototype, 'callProcessJob', this._patchCallProcessJob());
-      this._wrap(moduleExports.Worker.prototype, 'run', this._patchWorkerRun());
-
-      // As Events
-      this._wrap(moduleExports.Job.prototype, 'extendLock', this._patchExtendLock());
-      this._wrap(moduleExports.Job.prototype, 'remove', this._patchRemove());
-      this._wrap(moduleExports.Job.prototype, 'retry', this._patchRetry());
 
       return moduleExports;
     }
@@ -74,19 +59,11 @@ export class Instrumentation extends InstrumentationBase {
     return (moduleExports: typeof bullmq) => {
       this._diag.debug('un-patching');
 
-      this._unwrap(moduleExports.Queue.prototype, 'add');
       this._unwrap(moduleExports.Queue.prototype, 'addBulk');
-      this._unwrap(moduleExports.FlowProducer.prototype, 'add')
-      this._unwrap(moduleExports.FlowProducer.prototype, 'addBulk')
       this._unwrap(moduleExports.Job.prototype, 'addJob');
 
       // @ts-expect-error
       this._unwrap(moduleExports.Worker.prototype, 'callProcessJob');
-      this._unwrap(moduleExports.Worker.prototype, 'run');
-
-      this._unwrap(moduleExports.Job.prototype, 'extendLock');
-      this._unwrap(moduleExports.Job.prototype, 'remove');
-      this._unwrap(moduleExports.Job.prototype, 'retry');
     }
   }
 
@@ -133,30 +110,6 @@ export class Instrumentation extends InstrumentationBase {
     }
   }
 
-  private _patchQueueAdd(): (original: Function) => (...args: any) => any {
-    const instrumentation = this;
-    const tracer = instrumentation.tracer;
-    const action = 'Queue.add';
-
-    return function add(original) {
-      return async function patch(this: Queue, ...args: any): Promise<Job> {
-        const [name] = [...args];
-
-        const spanName = `${this.name}.${name} ${action}`;
-        const span = tracer.startSpan(spanName, {
-          attributes: {
-            [SemanticAttributes.MESSAGING_SYSTEM]: BullMQAttributes.MESSAGING_SYSTEM,
-            [SemanticAttributes.MESSAGING_DESTINATION]: this.name,
-            [BullMQAttributes.JOB_NAME]: name,
-          },
-          kind: SpanKind.INTERNAL
-        });
-
-        return Instrumentation.withContext(this, original, span, args);
-      };
-    };
-  }
-
   private _patchQueueAddBulk(): (original: Function) => (...args: any) => any {
     const instrumentation = this;
     const tracer = instrumentation.tracer;
@@ -173,48 +126,6 @@ export class Instrumentation extends InstrumentationBase {
             [SemanticAttributes.MESSAGING_DESTINATION]: this.name,
             [BullMQAttributes.JOB_BULK_NAMES]: names,
             [BullMQAttributes.JOB_BULK_COUNT]: names.length,
-          },
-          kind: SpanKind.INTERNAL
-        });
-
-        return Instrumentation.withContext(this, original, span, args);
-      };
-    };
-  }
-
-  private _patchFlowProducerAdd(): (original: Function) => (...args: any) => any {
-    const instrumentation = this;
-    const tracer = instrumentation.tracer;
-    const action = 'FlowProducer.add';
-
-    return function add(original) {
-      return async function patch(this: FlowProducer, flow: FlowJob, opts?: FlowOpts): Promise<JobNode> {
-        const spanName = `${flow.queueName}.${flow.name} ${action}`;
-        const span = tracer.startSpan(spanName, {
-          attributes: {
-            [SemanticAttributes.MESSAGING_SYSTEM]: BullMQAttributes.MESSAGING_SYSTEM,
-            [SemanticAttributes.MESSAGING_DESTINATION]: flow.queueName,
-            [BullMQAttributes.JOB_NAME]: flow.name,
-          },
-          kind: SpanKind.INTERNAL
-        });
-
-        return Instrumentation.withContext(this, original, span, [flow, opts])
-      };
-    };
-  }
-
-  private _patchFlowProducerAddBulk(): (original: Function) => (...args: any) => any {
-    const instrumentation = this;
-    const tracer = instrumentation.tracer;
-    const action = 'FlowProducer.addBulk';
-
-    return function addBulk(original) {
-      return async function patch(this: FlowProducer, ...args): Promise<JobNode> {
-        const spanName = `${action}`;
-        const span = tracer.startSpan(spanName, {
-          attributes: {
-            [SemanticAttributes.MESSAGING_SYSTEM]: BullMQAttributes.MESSAGING_SYSTEM,
           },
           kind: SpanKind.INTERNAL
         });
@@ -271,84 +182,6 @@ export class Instrumentation extends InstrumentationBase {
       }
     }
   }
-
-  private _patchWorkerRun(): (original: Function) => (...args: any) => any {
-    const instrumentation = this;
-    const tracer = instrumentation.tracer;
-    const action = 'Worker.run';
-
-    return function run(original) {
-      return async function patch(this: Worker, ...args: any): Promise<any> {
-        const spanName = `${this.name} ${action}`;
-        const span = tracer.startSpan(spanName, {
-          attributes: {
-            [SemanticAttributes.MESSAGING_SYSTEM]: BullMQAttributes.MESSAGING_SYSTEM,
-            [BullMQAttributes.WORKER_NAME]: this.name,
-            [BullMQAttributes.WORKER_CONCURRENCY]: this.opts?.concurrency ?? 'default',
-            [BullMQAttributes.WORKER_LOCK_DURATION]: this.opts?.lockDuration ?? 'default',
-            [BullMQAttributes.WORKER_LOCK_RENEW]: this.opts?.lockRenewTime ?? 'default',
-            [BullMQAttributes.WORKER_RATE_LIMIT_MAX]: this.opts?.limiter?.max ?? 'none',
-            [BullMQAttributes.WORKER_RATE_LIMIT_DURATION]: this.opts?.limiter?.duration ?? 'none',
-            // Limit by group keys was removed in bullmq 3.x
-            [BullMQAttributes.WORKER_RATE_LIMIT_GROUP]: (this.opts?.limiter as any)?.groupKey ?? 'none',
-          },
-          kind: SpanKind.INTERNAL
-        });
-
-        return Instrumentation.withContext(this, original, span, args);
-      };
-    };
-  }
-
-  private _patchExtendLock(): (original: Fn) => (...args: any) => any {
-    return function extendLock<T extends Fn>(original: T) {
-      return function patch(this: Job, ...args: any): Promise<ReturnType<T>> {
-        const span = trace.getSpan(context.active());
-        span?.addEvent('extendLock', {
-          [BullMQAttributes.JOB_NAME]: this.name,
-          [BullMQAttributes.JOB_TIMESTAMP]: this.timestamp,
-          [BullMQAttributes.JOB_PROCESSED_TIMESTAMP]: this.processedOn ?? 'unknown',
-          [BullMQAttributes.JOB_ATTEMPTS]: this.attemptsMade
-        });
-
-        return original.apply(this, args);
-      };
-    };
-  }
-
-  private _patchRemove(): (original: Fn) => (...args: any) => any {
-    return function extendLock<T extends Fn>(original: T) {
-      return function patch(this: Job, ...args: any): Promise<ReturnType<T>> {
-        const span = trace.getSpan(context.active());
-        span?.addEvent('remove', {
-          [BullMQAttributes.JOB_NAME]: this.name,
-          [BullMQAttributes.JOB_TIMESTAMP]: this.timestamp,
-          [BullMQAttributes.JOB_PROCESSED_TIMESTAMP]: this.processedOn ?? 'unknown',
-          [BullMQAttributes.JOB_ATTEMPTS]: this.attemptsMade
-        });
-
-        return original.apply(this, args);
-      };
-    };
-  }
-
-  private _patchRetry(): (original: Fn) => (...args: any) => any {
-    return function extendLock<T extends Fn>(original: T) {
-      return function patch(this: Job, ...args: any): Promise<ReturnType<T>> {
-        const span = trace.getSpan(context.active());
-        span?.addEvent('retry', {
-          [BullMQAttributes.JOB_NAME]: this.name,
-          [BullMQAttributes.JOB_TIMESTAMP]: this.timestamp,
-          [BullMQAttributes.JOB_PROCESSED_TIMESTAMP]: this.processedOn ?? 'unknown',
-          [BullMQAttributes.JOB_ATTEMPTS]: this.attemptsMade
-        });
-
-        return original.apply(this, args);
-      };
-    };
-  }
-
-
 
   private static setError = (span: Span, error: Error) => {
     span.recordException(error);
