@@ -1,4 +1,5 @@
 name: NPM Publish
+run-name: Check new version and publish
 
 on:
   pull_request:
