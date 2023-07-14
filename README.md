@@ -1,6 +1,6 @@
 # OpenTelemetry Bullmq Instrumentation for Node.js
 
-[![Node.js CI](https://github.com/jenniferplusplus/opentelemetry-instrumentation-bullmq/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jenniferplusplus/opentelemetry-instrumentation-bullmq/actions/workflows/ci.yml) 
+[![Node.js CI](https://github.com/jenniferplusplus/opentelemetry-instrumentation-bullmq/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jenniferplusplus/opentelemetry-instrumentation-bullmq/actions/workflows/ci.yml)
 [![npm version](https://badge.fury.io/js/@jenniferplusplus%2Fopentelemetry-instrumentation-bullmq.svg)](https://badge.fury.io/js/@jenniferplusplus%2Fopentelemetry-instrumentation-bullmq)
 
 This module provides automatic tracing instrumentation for [BullMQ][bullmq-web-url].
@@ -15,7 +15,7 @@ npm install --save @jenniferplusplus/opentelemetry-instrumentation-bullmq
 
 ### Supported Versions
 
-- `[1.90.1, 2.x, 3.x]`
+- `[1.90.1, 2.x, 3.x, 4.x]`
 
 It's likely that the instrumentation would support earlier versions of BullMQ, but I haven't tested it.
 
