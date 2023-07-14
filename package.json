@@ -1,6 +1,6 @@
 {
   "name": "@jenniferplusplus/opentelemetry-instrumentation-bullmq",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Auto-instrumentation for the BullMQ message framework",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
