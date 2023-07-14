@@ -30,7 +30,7 @@
     "flat": "^5.0.2"
   },
   "peerDependencies": {
-    "bullmq": "^1.90.1 || ^2 || ^3"
+    "bullmq": "^2 || ^3 || ^4"
   },
   "devDependencies": {
     "@opentelemetry/context-async-hooks": "^1.8.0",
