@@ -1,0 +1,39 @@
+name: NPM Publish
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - closed
+  workflow_dispatch:
+
+jobs:
+  publish:
+    needs:
+      - build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - id: version
+        uses: EndBug/version-check@v2.1.1
+        with:
+          file-url: https://unpkg.com/@jenniferplusplus/opentelemetry-instrumentation-bullmq@latest/package.json
+          static-checking: localIsNew
+      - name: Use Node.js
+        if: steps.version.outputs.changed == 'true'
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18.x
+      - name: Install
+        if: steps.version.outputs.changed == 'true'
+        run: npm ci
+      - name: Compile
+        if: steps.version.outputs.changed == 'true'
+        run: npm run compile
+      - name: NPM Publish
+        if: steps.version.outputs.changed == 'true'
+        uses: JS-DevTools/npm-publish@v1
+        with:
+          token: ${{ secrets.NPM_TOKEN }}
+          access: public

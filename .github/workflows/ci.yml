@@ -1,8 +1,8 @@
 name: Node.js CI
 
 on:
-  push:
-    branches: [ main ]
+  schedule:
+    - cron: '5 9 * * 5'
   pull_request:
     branches: [ main ]
   workflow_dispatch:
@@ -13,7 +13,7 @@ jobs:
     strategy:
       matrix:
         node-version: [16.x, 18.x, 20.x]
-        bullmq-version: [1.x, 2.x, 3.x, latest]
+        bullmq-version: [2.x, 3.x, latest]
     services:
       redis:
         image: redis:alpine
@@ -30,33 +30,3 @@ jobs:
       - run: npm run compile
       - run: npm run lint
       - run: npm test
-
-  publish:
-    needs:
-      - build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - id: version
-        uses: EndBug/version-check@v2.1.1
-        with:
-          file-url: https://unpkg.com/@jenniferplusplus/opentelemetry-instrumentation-bullmq@latest/package.json
-          static-checking: localIsNew
-      - name: Use Node.js
-        if: steps.version.outputs.changed == 'true'
-        uses: actions/setup-node@v3
-        with:
-          node-version: 18.x
-      - name: Install
-        if: steps.version.outputs.changed == 'true'
-        run: npm ci
-      - name: Compile
-        if: steps.version.outputs.changed == 'true'
-        run: npm run compile
-      - name: NPM Publish
-        if: steps.version.outputs.changed == 'true'
-        uses: JS-DevTools/npm-publish@v1
-        with:
-          token: ${{ secrets.NPM_TOKEN }}
-          access: public
-
