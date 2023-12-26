@@ -15,7 +15,7 @@ npm install --save @jenniferplusplus/opentelemetry-instrumentation-bullmq
 
 ### Supported Versions
 
-- `[1.90.1, 2.x, 3.x, 4.x]`
+- `[1.90.1, 2.x, 3.x, 4.x, 5.x]`
 
 It's likely that the instrumentation would support earlier versions of BullMQ, but I haven't tested it.
 
