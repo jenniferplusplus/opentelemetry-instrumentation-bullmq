@@ -38,7 +38,7 @@ export class Instrumentation extends InstrumentationBase {
    *   the plugin should patch multiple modules or versions.
    */
   protected init() {
-    return new InstrumentationNodeModuleDefinition<typeof bullmq>(
+    return new InstrumentationNodeModuleDefinition(
       'bullmq',
       ['1.*', '2.*', '3.*', '4.*', '5.*'],
       this._onPatchMain(),
