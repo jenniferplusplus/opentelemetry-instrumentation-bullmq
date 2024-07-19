@@ -10,6 +10,7 @@ export const BullMQAttributes = {
   JOB_FAILED_REASON: `${job}.failedReason`,
   JOB_FINISHED_TIMESTAMP: `${job}.finishedOn`,
   JOB_PROCESSED_TIMESTAMP: `${job}.processedOn`,
+  JOB_PRIORITY: `${job}.priority`,
   JOB_NAME: `${job}.name`,
   JOB_OPTS: `${job}.opts`,
   JOB_REPEAT_KEY: `${job}.repeatJobKey`,

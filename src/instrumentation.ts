@@ -140,7 +140,7 @@ export class Instrumentation extends InstrumentationBase {
 
     return function add(original) {
       return async function patch(this: Queue, ...args: any): Promise<Job> {
-        const [name] = [...args];
+        const [name, data, opts = {}] = [...args];
 
         const spanName = `${this.name}.${name} ${action}`;
         const span = tracer.startSpan(spanName, {
@@ -148,6 +148,7 @@ export class Instrumentation extends InstrumentationBase {
             [SemanticAttributes.MESSAGING_SYSTEM]: BullMQAttributes.MESSAGING_SYSTEM,
             [SemanticAttributes.MESSAGING_DESTINATION]: this.name,
             [BullMQAttributes.JOB_NAME]: name,
+            [BullMQAttributes.JOB_PRIORITY]: opts.priority || 0,
           },
           kind: SpanKind.INTERNAL
         });
@@ -244,6 +245,7 @@ export class Instrumentation extends InstrumentationBase {
             [BullMQAttributes.JOB_NAME]: job.name,
             [BullMQAttributes.JOB_ATTEMPTS]: job.attemptsMade,
             [BullMQAttributes.JOB_TIMESTAMP]: job.timestamp,
+            [BullMQAttributes.JOB_PRIORITY]: job.priority,
             [BullMQAttributes.JOB_DELAY]: job.delay,
             ...Instrumentation.attrMap(BullMQAttributes.JOB_OPTS, job.opts),
             [BullMQAttributes.QUEUE_NAME]: job.queueName,
