@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [18.x, 20.x, 21.x]
+        node-version: [18.x, 20.x, 22.x]
         bullmq-version: [2.x, 3.x, 4.x, latest]
     services:
       redis:
