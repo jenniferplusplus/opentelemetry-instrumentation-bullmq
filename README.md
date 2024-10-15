@@ -1,3 +1,6 @@
+> [!WARNING]  
+> This package is minimally maintained, and will be deprecated in the future. Consider using https://github.com/appsignal/opentelemetry-instrumentation-bullmq instead
+
 # OpenTelemetry Bullmq Instrumentation for Node.js
 
 [![Node.js CI](https://github.com/jenniferplusplus/opentelemetry-instrumentation-bullmq/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jenniferplusplus/opentelemetry-instrumentation-bullmq/actions/workflows/ci.yml)
@@ -69,6 +72,4 @@ Apache 2.0 - See [LICENSE][license-url] for more information.
 
 ## Contributing
 
-Contributions are welcome. Feel free to open an issue or submit a PR. I would like to have this package included in opentelemetry-js-contrib at some point. Until then, it lives here.
-
-BullMQ has a hard dependency on Redis, which means that Redis is (for now) a test dependency for the instrumentations. To run the tests, you should have a redis server running on localhost at the default port. If you have docker installed, you can just do `docker-compose up` and be ready to go.
+I no longer use BullMQ in any of my projects, and so I have no cause to update this library. I will continue to update to support new versions of node.js, and backward-compatible versions of BullMQ. I'm not accepting new features, and I would likely not make updates for any breaking changes in BullMQ. I plan to deprecate this package when there is a clear successor. Currently, [AppSignals's](https://github.com/appsignal/opentelemetry-instrumentation-bullmq) implementation is the most mature. The API and emitted telemetry is very similar to this one as it was forked from this project. [Taskforce.sh](https://github.com/taskforcesh/bullmq/pull/2721) is also developing a first-party tracing solution.
